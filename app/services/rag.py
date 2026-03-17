@@ -8,7 +8,7 @@ from langchain_core.output_parsers import StrOutputParser
 from app.core.config import settings
 import os
 
-os.environ["GOOGLE_API_KEY"] = settings.gemini_api_key
+os.environ["GOOGLE_API_KEY"] = settings.google_api_key
 
 def process_document(file_path: str) -> Chroma:
     loader = PyMuPDFLoader(file_path)
