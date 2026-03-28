@@ -21,7 +21,7 @@ def process_document(file_path: str) -> Chroma:
     chunks = splitter.split_documents(documents)
 
     embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/embedding-001"
+        model="models/gemini-embedding-001"
     )
     vectorstore = Chroma.from_documents(
         chunks,
@@ -32,7 +32,7 @@ def process_document(file_path: str) -> Chroma:
 
 def answer_question(vectorstore: Chroma, question: str) -> str:
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash",
+        model="gemini-1.5-flash",
         temperature=0
     )
 
