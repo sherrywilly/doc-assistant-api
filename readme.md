@@ -1,119 +1,177 @@
-# 📄 AI Document Assistant API
+# 📄 AI Document Assistant
 
-A production-ready AI-powered API that lets you upload any PDF and ask questions about it in plain English. Built with FastAPI, LangChain, ChromaDB, and Google Gemini.
+A production-ready, microservice-based AI platform that lets you upload any PDF and chat with it in plain English. Built with FastAPI, Streamlit, LangChain, ChromaDB, Google Gemini, and JWT authentication.
 
-## 🚀 Live Demo
-[Add your Railway link here]
+## 🏗️ Architecture
 
-## 💡 How It Works
 ```
-User uploads PDF
-      ↓
-Document split into chunks
-      ↓
-Chunks converted to vectors (embeddings)
-      ↓
-Vectors stored in ChromaDB
-      ↓
-User asks a question
-      ↓
-ChromaDB finds most relevant chunks
-      ↓
-Gemini answers based on context only
-      ↓
-Answer returned to user
+┌──────────────────────────────────────────────────────┐
+│                  Browser / Client                     │
+└──────────────┬──────────────────────────┬────────────┘
+               │ :8501                    │ auth only
+               ▼                          ▼
+┌─────────────────────┐     ┌─────────────────────────┐
+│  frontend           │     │  auth-service           │
+│  Streamlit UI       │────▶│  FastAPI + SQLite       │
+│  (port 8501)        │     │  JWT register / login   │
+└────────┬────────────┘     │  (port 8001)            │
+         │ Bearer JWT        └─────────────────────────┘
+         ▼ :8000
+┌─────────────────────┐
+│  api-service        │
+│  FastAPI + RAG      │
+│  LangChain + Gemini │
+│  ChromaDB vectors   │
+│  (port 8000)        │
+└─────────────────────┘
 ```
 
-## 🧠 Why RAG?
-Traditional approaches send entire documents to the LLM every query — expensive and slow. This project uses Retrieval Augmented Generation (RAG) to retrieve only the most relevant chunks, reducing token costs by up to 100x while improving answer accuracy.
+## 🚀 Quick Start — Docker Compose (recommended)
+
+```bash
+# 1. Clone
+git clone https://github.com/sherrywilly/doc-assistant-api
+cd doc-assistant-api
+
+# 2. Create a .env file
+cat > .env <<EOF
+GOOGLE_API_KEY=your-gemini-api-key
+JWT_SECRET_KEY=a-long-random-secret-at-least-32-chars
+EOF
+
+# 3. Start all three services
+docker compose up --build
+
+# 4. Open http://localhost:8501  (Streamlit UI)
+#    API docs: http://localhost:8000/docs
+#    Auth docs: http://localhost:8001/docs
+```
 
 ## 🛠️ Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
 | API Framework | FastAPI |
+| Auth | JWT (python-jose) + PBKDF2-SHA256 (passlib) |
 | AI Orchestration | LangChain |
 | Vector Store | ChromaDB |
-| LLM | Google Gemini |
+| LLM | Google Gemini 2.0 Flash |
+| Embeddings | Google Generative AI Embeddings |
+| User Store | SQLite (via SQLAlchemy) |
 | Frontend | Streamlit |
-| Deployment | Railway |
+| Containerisation | Docker + Docker Compose |
+| CI | GitHub Actions |
+| Registry | GitHub Container Registry (GHCR) |
 
-## ⚙️ Getting Started
+## ⚙️ Services
 
-### 1. Clone the repository
-```bash
-git clone https://github.com/sherrywilly/doc-assistant-api
-cd doc-assistant-api
-```
+### auth-service (port 8001)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/auth/register` | POST | Create an account |
+| `/auth/login` | POST | Get a JWT token (OAuth2 form) |
+| `/auth/verify` | POST | Validate a token |
 
-### 2. Install dependencies
-```bash
-pip install -r requirements.txt
-```
+### api-service (port 8000)
+All document endpoints require a `Authorization: Bearer <token>` header.
 
-### 3. Set up environment variables
-Create a `.env` file in the root directory:
-```
-GEMINI_API_KEY=your-key-here
-```
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/api/v1/upload/{doc_id}` | POST | Upload & index a PDF |
+| `/api/v1/ask/{doc_id}` | POST | Ask a question about a doc |
+| `/api/v1/docs/list` | GET | List your uploaded documents |
 
-### 4. Run the API
-```bash
-uvicorn app.main:app --reload
-```
-
-### 5. Run the frontend
-```bash
-streamlit run frontend.py
-```
-
-## 📡 API Endpoints
-
-### Upload a document
-```
-POST /api/v1/upload/{doc_id}
-Content-Type: multipart/form-data
-Body: file (PDF)
-```
-
-### Ask a question
-```
-POST /api/v1/ask/{doc_id}
-Params: question (string)
-```
+### frontend (port 8501)
+Full Streamlit UI with login/register, PDF upload, conversation history, export chat, and a per-user document library.
 
 ## 📁 Project Structure
+
 ```
 doc-assistant-api/
-├── app/
+├── app/                        # API service
 │   ├── main.py
+│   ├── core/
+│   │   ├── config.py           # Settings (pydantic-settings)
+│   │   ├── security.py         # JWT verification dependency
+│   │   └── middleware.py       # Request logging middleware
 │   ├── routes/
-│   │   └── document.py
-│   ├── services/
-│   │   └── rag.py
-│   └── core/
-│       └── config.py
-├── frontend.py
-├── requirements.txt
-├── Dockerfile
-├── .env
-├── .gitignore
-└── README.md
+│   │   ├── document.py         # Upload / Ask / List endpoints
+│   │   └── health.py           # Health endpoint
+│   └── services/
+│       └── rag.py              # LangChain RAG pipeline
+├── auth_service/               # Auth microservice
+│   ├── app/
+│   │   ├── main.py             # Register / Login / Verify
+│   │   ├── auth.py             # PBKDF2 hashing + JWT creation
+│   │   ├── database.py         # SQLAlchemy + SQLite
+│   │   ├── models.py           # User ORM model
+│   │   └── schemas.py          # Pydantic schemas
+│   ├── Dockerfile
+│   └── requirements.txt
+├── tests/
+│   ├── conftest.py             # Shared fixtures + auth override
+│   ├── test_api.py             # API service tests (21 tests)
+│   ├── test_auth.py            # Auth service tests (14 tests)
+│   └── test_frontend.py        # Frontend tests (24 tests)
+├── frontend.py                 # Streamlit app
+├── Dockerfile                  # API service image
+├── Dockerfile.frontend         # Frontend service image
+├── docker-compose.yml          # 3-service orchestration
+├── requirements.txt            # API service dependencies
+└── .github/workflows/
+    ├── ci.yml                  # Test + lint on every push/PR
+    └── cd.yml                  # Build + push to GHCR on main
 ```
 
 ## 🔑 Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| GEMINI_API_KEY | Your Google Gemini API key |
+| Variable | Service | Description |
+|----------|---------|-------------|
+| `GOOGLE_API_KEY` | api-service | Your Google Gemini API key |
+| `JWT_SECRET_KEY` | api-service, auth-service | Shared JWT signing secret |
+| `DATABASE_URL` | auth-service | SQLite URL (default: `sqlite:///./users.db`) |
 
-## 🚀 Deployment
+## 🧪 Running Tests Locally
 
-This project is deployed on Railway.
-1. Push code to GitHub
-2. Connect Railway to your repository
-3. Add environment variables in Railway dashboard
-4. Deploy ✅
+```bash
+pip install -r requirements.txt
+pip install -r auth_service/requirements.txt
+pip install pytest httpx
+
+GOOGLE_API_KEY=dummy JWT_SECRET_KEY=test python -m pytest tests/ -v
+```
+
+## 🔄 CI/CD
+
+- **CI** (`.github/workflows/ci.yml`): Runs linting (`ruff`) and the full test suite on every push and pull request.
+- **CD** (`.github/workflows/cd.yml`): Builds and pushes three Docker images to GHCR on every merge to `main`.
+
+Images published:
+- `ghcr.io/<owner>/doc-assistant-auth:latest`
+- `ghcr.io/<owner>/doc-assistant-api:latest`
+- `ghcr.io/<owner>/doc-assistant-frontend:latest`
+
+## 💡 How RAG Works
+
+```
+User uploads PDF
+      ↓
+PDF split into 1000-char chunks (200 overlap)
+      ↓
+Chunks embedded with Google text-embedding-001
+      ↓
+Vectors stored in ChromaDB (per-user namespace)
+      ↓
+User asks a question
+      ↓
+ChromaDB retrieves most relevant chunks
+      ↓
+Gemini 2.0 Flash answers from context only
+      ↓
+Answer returned with full conversation history
+```
 
 ## 👨‍💻 Author
 

@@ -1,0 +1,99 @@
+# ---------------------------------------------------------------------------
+# AI Document Assistant — Microservice Stack
+# ---------------------------------------------------------------------------
+#
+# Services:
+#   auth-service   → JWT auth          (port 8001)
+#   api-service    → RAG document API  (port 8000)
+#   frontend       → Streamlit UI      (port 8501)
+#
+# Required environment variables (create a .env file at the repo root):
+#   GOOGLE_API_KEY    — Google Gemini API key
+#   JWT_SECRET_KEY    — Secret used to sign/verify JWTs (min 32 chars)
+# ---------------------------------------------------------------------------
+
+services:
+
+  # --------------------------------------------------------------------------
+  # Auth microservice
+  # --------------------------------------------------------------------------
+  auth-service:
+    build:
+      context: ./auth_service
+      dockerfile: Dockerfile
+    image: doc-assistant/auth-service:latest
+    container_name: doc-auth-service
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-secret-key-change-in-production}
+      DATABASE_URL: sqlite:////data/users.db
+    volumes:
+      - auth_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # --------------------------------------------------------------------------
+  # RAG API service
+  # --------------------------------------------------------------------------
+  api-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: doc-assistant/api-service:latest
+    container_name: doc-api-service
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-secret-key-change-in-production}
+    volumes:
+      - chroma_data:/app/chroma_db
+    depends_on:
+      auth-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # --------------------------------------------------------------------------
+  # Streamlit frontend
+  # --------------------------------------------------------------------------
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    image: doc-assistant/frontend:latest
+    container_name: doc-frontend
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    environment:
+      # These are read by the Streamlit app as default URLs
+      API_BASE_URL: http://api-service:8000/api/v1
+      AUTH_BASE_URL: http://auth-service:8001/auth
+    depends_on:
+      api-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+# ---------------------------------------------------------------------------
+# Named volumes
+# ---------------------------------------------------------------------------
+volumes:
+  auth_data:
+  chroma_data:

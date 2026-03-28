@@ -9,6 +9,7 @@ pymupdf
 python-multipart
 pydantic-settings
 python-dotenv
+python-jose[cryptography]
 
 # Frontend
 streamlit
